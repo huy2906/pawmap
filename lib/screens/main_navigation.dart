@@ -13,25 +13,48 @@ class MainNavigation extends StatefulWidget {
 
 class _MainNavigationState extends State<MainNavigation> {
   int _currentIndex = 0;
+  // Lazy loading: chỉ khởi tạo màn hình khi người dùng lần đầu bấm vào tab
+  final Set<int> _visitedTabs = {0};
 
-  final List<Widget> _screens = [
-    const HomeScreen(),
-    const MapScreen(),
-    const AppointmentsScreen(),
-    const ProfileScreen(),
-  ];
+  Widget _buildScreen(int index) {
+    switch (index) {
+      case 0:
+        return const HomeScreen();
+      case 1:
+        return const MapScreen();
+      case 2:
+        return const AppointmentsScreen();
+      case 3:
+        return const ProfileScreen();
+      default:
+        return const HomeScreen();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _screens,
+      body: Stack(
+        children: List.generate(4, (index) {
+          final bool isVisited = _visitedTabs.contains(index);
+          final bool isActive = _currentIndex == index;
+          return Offstage(
+            offstage: !isActive,
+            child: isVisited ? _buildScreen(index) : const SizedBox.shrink(),
+          );
+        }),
       ),
       bottomNavigationBar: BottomNavigationBar(
+        type: BottomNavigationBarType.fixed,
+        backgroundColor: Colors.white,
+        selectedItemColor: const Color(0xFFFF8C42),
+        unselectedItemColor: const Color(0xFFAAAAAA),
+        selectedFontSize: 11,
+        unselectedFontSize: 11,
         currentIndex: _currentIndex,
         onTap: (index) {
           setState(() {
+            _visitedTabs.add(index);
             _currentIndex = index;
           });
         },

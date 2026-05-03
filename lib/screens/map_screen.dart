@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:trackasia_gl/trackasia_gl.dart';
+import 'package:geolocator/geolocator.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -10,8 +11,43 @@ class MapScreen extends StatefulWidget {
 
 class _MapScreenState extends State<MapScreen> {
   TrackAsiaMapController? _mapController;
+  bool _locationGranted = false;
   final String _styleUrl =
       'https://maps.track-asia.com/styles/v1/streets.json?key=db017177761694204b5f9f312923e00869';
+
+  @override
+  void initState() {
+    super.initState();
+    _checkLocationPermission();
+  }
+
+  Future<void> _checkLocationPermission() async {
+    bool serviceEnabled;
+    LocationPermission permission;
+
+    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      return;
+    }
+
+    permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        return;
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      return;
+    }
+
+    if (mounted) {
+      setState(() {
+        _locationGranted = true;
+      });
+    }
+  }
 
   void _onMapCreated(TrackAsiaMapController controller) {
     _mapController = controller;
@@ -55,11 +91,15 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   void _moveToCurrentLocation() {
-    _mapController?.animateCamera(
-      CameraUpdate.newCameraPosition(
-        const CameraPosition(target: LatLng(10.7769, 106.7009), zoom: 14.0),
-      ),
-    );
+    if (_locationGranted) {
+      _mapController?.animateCamera(
+        CameraUpdate.newCameraPosition(
+          const CameraPosition(target: LatLng(10.7769, 106.7009), zoom: 14.0),
+        ),
+      );
+    } else {
+      _checkLocationPermission();
+    }
   }
 
   @override
@@ -83,8 +123,10 @@ class _MapScreenState extends State<MapScreen> {
         ),
         onMapCreated: _onMapCreated,
         onStyleLoadedCallback: _onStyleLoaded,
-        myLocationEnabled: true,
-        myLocationTrackingMode: MyLocationTrackingMode.tracking,
+        myLocationEnabled: _locationGranted,
+        myLocationTrackingMode: _locationGranted 
+            ? MyLocationTrackingMode.tracking 
+            : MyLocationTrackingMode.none,
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _moveToCurrentLocation,
