@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:trackasia_gl/trackasia_gl.dart';
+import '../config/api_keys.dart';
 
 class SOSScreen extends StatefulWidget {
   const SOSScreen({super.key});
@@ -11,7 +12,7 @@ class SOSScreen extends StatefulWidget {
 class _SOSScreenState extends State<SOSScreen> {
   TrackAsiaMapController? _mapController;
   final String _styleUrl =
-      'https://maps.track-asia.com/styles/v1/streets.json?key=db017177761694204b5f9f312923e00869';
+      'https://maps.track-asia.com/styles/v2/streets.json?apiKey=${ApiKeys.trackAsiaKey}';
   bool _searching = true;
 
   void _onMapCreated(TrackAsiaMapController controller) {
@@ -50,6 +51,7 @@ class _SOSScreenState extends State<SOSScreen> {
         const SymbolOptions(
           geometry: LatLng(10.7769, 106.7009),
           textField: 'PetCare 24/7',
+          fontNames: ['Noto Sans Regular'],
           textOffset: Offset(0, 2.2),
           textSize: 14,
           textColor: '#CC0000',

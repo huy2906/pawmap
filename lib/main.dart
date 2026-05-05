@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:trackasia_gl/trackasia_gl.dart';
 import 'theme/app_theme.dart';
 import 'screens/main_navigation.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // TODO: Add real Firebase initialization configuration here when available.
-  // await Firebase.initializeApp(
-  //   options: DefaultFirebaseOptions.currentPlatform,
-  // );
+  
+  // Cấu hình custom header cho TrackAsia Map SDK
+  TrackAsiaMap.setHttpHeader("T-BUNDLE-ID", "com.example.pawmap_vietnam");
   
   runApp(const PawMapApp());
 }

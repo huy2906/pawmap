@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:trackasia_gl/trackasia_gl.dart';
 import 'package:geolocator/geolocator.dart';
+import '../config/api_keys.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -13,7 +14,7 @@ class _MapScreenState extends State<MapScreen> {
   TrackAsiaMapController? _mapController;
   bool _locationGranted = false;
   final String _styleUrl =
-      'https://maps.track-asia.com/styles/v1/streets.json?key=db017177761694204b5f9f312923e00869';
+      'https://maps.track-asia.com/styles/v2/streets.json?key=${ApiKeys.trackAsiaKey}';
 
   @override
   void initState() {
@@ -77,6 +78,7 @@ class _MapScreenState extends State<MapScreen> {
           SymbolOptions(
             geometry: LatLng(clinic['lat'] as double, clinic['lng'] as double),
             textField: clinic['name'] as String,
+            fontNames: const ['Noto Sans Regular'],
             textOffset: const Offset(0, 2.0),
             textSize: 12,
             textColor: '#1a1a1a',
@@ -90,13 +92,22 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  void _moveToCurrentLocation() {
+  Future<void> _moveToCurrentLocation() async {
     if (_locationGranted) {
-      _mapController?.animateCamera(
-        CameraUpdate.newCameraPosition(
-          const CameraPosition(target: LatLng(10.7769, 106.7009), zoom: 14.0),
-        ),
-      );
+      try {
+        final position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+        );
+        _mapController?.animateCamera(
+          CameraUpdate.newCameraPosition(
+            CameraPosition(
+                target: LatLng(position.latitude, position.longitude),
+                zoom: 14.0),
+          ),
+        );
+      } catch (e) {
+        debugPrint('Lỗi khi lấy vị trí: $e');
+      }
     } else {
       _checkLocationPermission();
     }
@@ -124,8 +135,8 @@ class _MapScreenState extends State<MapScreen> {
         onMapCreated: _onMapCreated,
         onStyleLoadedCallback: _onStyleLoaded,
         myLocationEnabled: _locationGranted,
-        myLocationTrackingMode: _locationGranted 
-            ? MyLocationTrackingMode.tracking 
+        myLocationTrackingMode: _locationGranted
+            ? MyLocationTrackingMode.tracking
             : MyLocationTrackingMode.none,
       ),
       floatingActionButton: FloatingActionButton.extended(
