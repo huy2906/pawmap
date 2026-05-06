@@ -7,7 +7,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   // Cấu hình custom header cho TrackAsia Map SDK
-  TrackAsiaMap.setHttpHeader("T-BUNDLE-ID", "com.example.pawmap_vietnam");
+  await setHttpHeaders({"T-BUNDLE-ID": "com.example.pawmap_vietnam"});
   
   runApp(const PawMapApp());
 }
