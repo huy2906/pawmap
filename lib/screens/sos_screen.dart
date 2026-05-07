@@ -17,6 +17,16 @@ class _SOSScreenState extends State<SOSScreen> {
 
   void _onMapCreated(TrackAsiaMapController controller) {
     _mapController = controller;
+    // Fix: moveCamera ngay lập tức (không animation) đến TP.HCM
+    // trước khi style load xong để tránh SDK request tile San Francisco
+    controller.moveCamera(
+      CameraUpdate.newCameraPosition(
+        const CameraPosition(
+          target: LatLng(10.7769, 106.7009),
+          zoom: 12.0,
+        ),
+      ),
+    );
   }
 
   void _onStyleLoaded() {

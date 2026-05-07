@@ -52,6 +52,16 @@ class _MapScreenState extends State<MapScreen> {
 
   void _onMapCreated(TrackAsiaMapController controller) {
     _mapController = controller;
+    // Fix: moveCamera ngay lập tức (không animation) đến TP.HCM
+    // trước khi style load xong để tránh SDK request tile San Francisco
+    controller.moveCamera(
+      CameraUpdate.newCameraPosition(
+        const CameraPosition(
+          target: LatLng(10.7769, 106.7009),
+          zoom: 12.0,
+        ),
+      ),
+    );
   }
 
   Future<void> _onStyleLoaded() async {
@@ -138,6 +148,13 @@ class _MapScreenState extends State<MapScreen> {
         myLocationTrackingMode: _locationGranted
             ? MyLocationTrackingMode.tracking
             : MyLocationTrackingMode.none,
+        // Fix: buộc SDK dùng tọa độ TP.HCM ngay từ đầu,
+        // tránh render tile mặc định San Francisco của SDK
+        minMaxZoomPreference: const MinMaxZoomPreference(5, 18),
+        compassEnabled: true,
+        rotateGesturesEnabled: true,
+        scrollGesturesEnabled: true,
+        zoomGesturesEnabled: true,
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _moveToCurrentLocation,
