@@ -116,12 +116,15 @@ class _MapScreenState extends State<MapScreen> {
 
         // Kiểm tra nếu vị trí nằm ngoài lãnh thổ Việt Nam (ví dụ do máy ảo Emulator mặc định GPS ở Mỹ)
         // Bounding box tương đối của Việt Nam: vĩ độ (8.0 -> 23.5), kinh độ (102.0 -> 109.5)
-        if (targetLat < 8.0 || targetLat > 23.5 || 
-            targetLng < 102.0 || targetLng > 109.5) {
+        if (targetLat < 8.0 ||
+            targetLat > 23.5 ||
+            targetLng < 102.0 ||
+            targetLng > 109.5) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Vị trí giả lập nằm ngoài Việt Nam, đang dùng vị trí mặc định tại TP.HCM.'),
+                content: Text(
+                    'Vị trí giả lập nằm ngoài Việt Nam, đang dùng vị trí mặc định tại TP.HCM.'),
                 duration: Duration(seconds: 3),
               ),
             );
@@ -132,15 +135,12 @@ class _MapScreenState extends State<MapScreen> {
 
         _mapController?.animateCamera(
           CameraUpdate.newCameraPosition(
-            CameraPosition(
-                target: LatLng(targetLat, targetLng),
-                zoom: 14.0),
+            CameraPosition(target: LatLng(targetLat, targetLng), zoom: 14.0),
           ),
         );
 
         // Gọi API tìm kiếm địa điểm xung quanh
         await _fetchNearbyPlaces(targetLat, targetLng);
-
       } catch (e) {
         debugPrint('Lỗi khi lấy vị trí: $e');
       }
@@ -150,13 +150,13 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<void> _fetchNearbyPlaces(double lat, double lng) async {
-    final url = Uri.parse(
-        'https://maps.track-asia.com/api/v2/place/nearbysearch/json'
-        '?location=$lat,$lng'
-        '&radius=2000'
-        '&key=${ApiKeys.trackAsiaKey}'
-        '&type=veterinary|pet_store|pharmacy'
-        '&new_admin=true');
+    final url =
+        Uri.parse('https://maps.track-asia.com/api/v2/place/nearbysearch/json'
+            '?location=$lat,$lng'
+            '&radius=5000'
+            '&key=${ApiKeys.trackAsiaKey}'
+            '&type=veterinary_care|pet_store'
+            '&new_admin=true');
 
     try {
       final response = await http.get(url);
@@ -167,7 +167,8 @@ class _MapScreenState extends State<MapScreen> {
           if (results.isEmpty) {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Không tìm thấy địa điểm xung quanh')),
+                const SnackBar(
+                    content: Text('Không tìm thấy địa điểm xung quanh')),
               );
             }
             return;
@@ -238,7 +239,8 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  void _showPlacesBottomSheet(List<dynamic> places, double currentLat, double currentLng) {
+  void _showPlacesBottomSheet(
+      List<dynamic> places, double currentLat, double currentLng) {
     if (!mounted) return;
 
     showModalBottomSheet(
@@ -275,8 +277,9 @@ class _MapScreenState extends State<MapScreen> {
                     final lat = geometry['lat'] as double;
                     final lng = geometry['lng'] as double;
 
-                    final distance = Geolocator.distanceBetween(currentLat, currentLng, lat, lng);
-                    final distanceText = distance > 1000 
+                    final distance = Geolocator.distanceBetween(
+                        currentLat, currentLng, lat, lng);
+                    final distanceText = distance > 1000
                         ? '${(distance / 1000).toStringAsFixed(1)} km'
                         : '${distance.toStringAsFixed(0)} m';
 
@@ -286,15 +289,19 @@ class _MapScreenState extends State<MapScreen> {
                         child: const Icon(Icons.place, color: Colors.blue),
                       ),
                       title: Text(place['name'] ?? 'Không có tên'),
-                      subtitle: Text(place['formatted_address'] ?? place['vicinity'] ?? ''),
+                      subtitle: Text(place['formatted_address'] ??
+                          place['vicinity'] ??
+                          ''),
                       trailing: Text(
                         distanceText,
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green),
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, color: Colors.green),
                       ),
                       onTap: () {
                         _mapController?.animateCamera(
                           CameraUpdate.newCameraPosition(
-                            CameraPosition(target: LatLng(lat, lng), zoom: 16.0),
+                            CameraPosition(
+                                target: LatLng(lat, lng), zoom: 16.0),
                           ),
                         );
                         Navigator.pop(context);
