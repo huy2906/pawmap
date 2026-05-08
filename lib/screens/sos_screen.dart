@@ -158,6 +158,7 @@ class _SOSScreenState extends State<SOSScreen> {
               target: LatLng(10.7769, 106.7009),
               zoom: 12.0,
             ),
+            minMaxZoomPreference: const MinMaxZoomPreference(10, 18),
             onMapCreated: _onMapCreated,
             onStyleLoadedCallback: _onStyleLoaded,
             myLocationEnabled: true,
