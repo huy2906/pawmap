@@ -9,10 +9,9 @@
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true">
 
-        <!-- Fix TrackAsia map initial camera to Ho Chi Minh City instead of default San Francisco -->
         <meta-data
-            android:name="com.trackasia.android.MapboxAccountManager.DEFAULT_CAMERA"
-            android:value="10.7769,106.7009,12"/>
+            android:name="com.google.android.geo.API_KEY"
+            android:value="AIzaSyBg88b6GAaT4KZSAVKbdQnQlHLi4YeSHOQ"/>
 
         <activity
             android:name=".MainActivity"
