@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:trackasia_gl/trackasia_gl.dart';
 import 'package:geolocator/geolocator.dart';
 import 'dart:convert';
+import 'dart:async';
+import 'dart:math';
 import 'package:http/http.dart' as http;
+import 'package:flutter/services.dart';
+import 'dart:typed_data';
 import '../config/api_keys.dart';
 
 class MapScreen extends StatefulWidget {
@@ -31,6 +35,12 @@ class _MapScreenState extends State<MapScreen> {
   String? _routeDistance;
   bool _isShowingRoute = false;
 
+  Timer? _debounce;
+  List<dynamic> _autocompleteResults = [];
+  bool _isSearching = false;
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+
   @override
   void initState() {
     super.initState();
@@ -40,6 +50,9 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void dispose() {
     _pageController.dispose();
+    _debounce?.cancel();
+    _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
@@ -92,25 +105,98 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<void> _onStyleLoaded() async {
+    try {
+      final ByteData bytes = await rootBundle.load('assets/images/round_pushpin.png');
+      final Uint8List list = bytes.buffer.asUint8List();
+      await _mapController?.addImage('custom-marker', list);
+    } catch (e) {
+      debugPrint('Lỗi tải round_pushpin: $e');
+    }
+
+    try {
+      final ByteData bytesBlue = await rootBundle.load('assets/images/blue_marker.png');
+      final Uint8List listBlue = bytesBlue.buffer.asUint8List();
+      await _mapController?.addImage('blue-marker', listBlue);
+    } catch (e) {
+      debugPrint('Lỗi tải blue_marker: $e');
+    }
+
     if (_places.isNotEmpty) {
       _showPlacesOnMap(_places);
     }
   }
 
-  void _onSymbolTapped(Symbol symbol) {
-    final index = _places.indexWhere((place) {
-      final lat = place['geometry']['location']['lat'];
-      final lng = place['geometry']['location']['lng'];
-      return symbol.options.geometry?.latitude == lat && symbol.options.geometry?.longitude == lng;
-    });
+  void _onMapClick(Point<double> point, LatLng coordinates) async {
+    if (_mapController == null || _places.isEmpty) return;
 
-    if (index != -1) {
+    int closestIndex = -1;
+    double minDistance = double.infinity;
+
+    final futures = _places.map((p) {
+      final lat = p['geometry']['location']['lat'] as double;
+      final lng = p['geometry']['location']['lng'] as double;
+      return _mapController!.toScreenLocation(LatLng(lat, lng));
+    }).toList();
+
+    final points = await Future.wait(futures);
+
+    for (int i = 0; i < points.length; i++) {
+      final p = points[i];
+      final dx = p.x - point.x;
+      final dy = p.y - point.y;
+      final distance = sqrt(dx * dx + dy * dy);
+
+      if (distance < 100 && distance < minDistance) {
+        closestIndex = i;
+        minDistance = distance;
+      }
+    }
+
+    if (closestIndex != -1) {
+      _onMarkerTapped(closestIndex);
+    }
+  }
+
+  void _onMarkerTapped(int index) {
+    if (_pageController.hasClients) {
       _pageController.animateToPage(
         index,
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
       );
+    }
+    if (index != _selectedPlaceIndex) {
       _onCardChanged(index);
+    } else {
+      final lat = _places[index]['geometry']['location']['lat'];
+      final lng = _places[index]['geometry']['location']['lng'];
+      _mapController?.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(target: LatLng(lat, lng), zoom: 15.0),
+        ),
+      );
+    }
+
+    if (_places[index]['is_search_result'] == true) {
+      final lat = _places[index]['geometry']['location']['lat'];
+      final lng = _places[index]['geometry']['location']['lng'];
+      _places[index]['is_search_result'] = false;
+      _fetchNearbyPlaces(lat, lng, searchResult: _places[index]);
+    }
+  }
+
+  void _onSymbolTapped(Symbol symbol) {
+    final index = _places.indexWhere((place) {
+      final lat = (place['geometry']['location']['lat'] as num).toDouble();
+      final lng = (place['geometry']['location']['lng'] as num).toDouble();
+      final symLat = symbol.options.geometry?.latitude;
+      final symLng = symbol.options.geometry?.longitude;
+      if (symLat == null || symLng == null) return false;
+      return (symLat - lat).abs() < 0.0001 && (symLng - lng).abs() < 0.0001;
+    });
+
+    if (index != -1) {
+      _onMarkerTapped(index);
     }
   }
 
@@ -165,7 +251,7 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  Future<void> _fetchNearbyPlaces(double lat, double lng) async {
+  Future<void> _fetchNearbyPlaces(double lat, double lng, {Map<String, dynamic>? searchResult}) async {
     setState(() {
       _isLoading = true;
       _routeDistance = null;
@@ -188,11 +274,26 @@ class _MapScreenState extends State<MapScreen> {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['status'] == 'OK' || data['status'] == 'ZERO_RESULTS') {
-          final results = data['results'] as List<dynamic>? ?? [];
+          List<dynamic> results = data['results'] as List<dynamic>? ?? [];
+          
+          if (searchResult != null) {
+            final searchLat = searchResult['geometry']['location']['lat'];
+            final searchLng = searchResult['geometry']['location']['lng'];
+            results.removeWhere((p) => 
+              p['geometry']['location']['lat'] == searchLat && 
+              p['geometry']['location']['lng'] == searchLng
+            );
+            results.insert(0, searchResult);
+          }
           
           setState(() {
             _places = results;
             _isLoading = false;
+            if (searchResult != null) {
+              _selectedPlaceIndex = 0;
+            } else if (_places.isNotEmpty) {
+              _selectedPlaceIndex = -1;
+            }
           });
           
           if (results.isEmpty) {
@@ -204,6 +305,13 @@ class _MapScreenState extends State<MapScreen> {
             }
           } else {
             await _showPlacesOnMap(results);
+            if (searchResult != null) {
+              _mapController?.animateCamera(
+                CameraUpdate.newCameraPosition(
+                  CameraPosition(target: LatLng(lat, lng), zoom: 15.0),
+                ),
+              );
+            }
           }
         } else {
           setState(() {
@@ -253,15 +361,17 @@ class _MapScreenState extends State<MapScreen> {
         await _mapController!.addSymbol(
           SymbolOptions(
             geometry: LatLng(placeLat, placeLng),
-            iconImage: "marker-15",
-            iconSize: i == _selectedPlaceIndex ? 2.0 : 1.5,
+            iconImage: place['is_search_result'] == true ? "custom-marker" : "blue-marker",
+            iconSize: i == _selectedPlaceIndex 
+                      ? (place['is_search_result'] == true ? 0.6 : 1.5) 
+                      : (place['is_search_result'] == true ? 0.4 : 1.0),
             textField: name,
             fontNames: const ['Noto Sans Regular'],
             textOffset: const Offset(0, 2.0),
-            textSize: 12,
+            textSize: 14,
             textColor: '#1a1a1a',
             textHaloColor: '#FFFFFF',
-            textHaloWidth: 1.5,
+            textHaloWidth: 2.0,
           ),
         );
       } catch (e) {
@@ -438,44 +548,232 @@ class _MapScreenState extends State<MapScreen> {
     });
   }
 
+  void _onSearchChanged(String query) {
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+
+    if (query.isEmpty) {
+      setState(() {
+        _autocompleteResults = [];
+        _isSearching = false;
+      });
+      return;
+    }
+
+    _debounce = Timer(const Duration(milliseconds: 300), () {
+      _fetchAutocomplete(query);
+    });
+  }
+
+  Future<void> _fetchAutocomplete(String query) async {
+    setState(() {
+      _isSearching = true;
+    });
+
+    final url = Uri.parse('https://maps.track-asia.com/api/v2/place/autocomplete/json'
+        '?input=$query'
+        '&location=$_currentLat,$_currentLng'
+        '&size=5'
+        '&new_admin=true'
+        '&key=${ApiKeys.trackAsiaKey}');
+
+    try {
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'OK' || data['status'] == 'ZERO_RESULTS') {
+          setState(() {
+            _autocompleteResults = data['predictions'] as List<dynamic>? ?? [];
+            _isSearching = false;
+          });
+        } else {
+          setState(() {
+            _isSearching = false;
+            _autocompleteResults = [];
+          });
+        }
+      } else {
+        setState(() {
+          _isSearching = false;
+          _autocompleteResults = [];
+        });
+      }
+    } catch (e) {
+      debugPrint('Lỗi Autocomplete API: $e');
+      setState(() {
+        _isSearching = false;
+        _autocompleteResults = [];
+      });
+    }
+  }
+
+  Future<void> _onSuggestionSelected(dynamic suggestion) async {
+    _searchFocusNode.unfocus();
+    setState(() {
+      _autocompleteResults = [];
+      _searchController.text = suggestion['name'] ?? '';
+      _isLoading = true;
+    });
+
+    final placeId = suggestion['place_id'];
+    if (placeId == null) {
+      setState(() { _isLoading = false; });
+      return;
+    }
+
+    final url = Uri.parse('https://maps.track-asia.com/api/v2/place/details/json'
+        '?place_id=$placeId'
+        '&key=${ApiKeys.trackAsiaKey}');
+
+    try {
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'OK' && data['result'] != null) {
+          final result = data['result'];
+          final lat = result['geometry']['location']['lat'] as double;
+          final lng = result['geometry']['location']['lng'] as double;
+          final name = result['name'] as String;
+
+          final place = {
+            'geometry': {
+              'location': {'lat': lat, 'lng': lng}
+            },
+            'name': name,
+            'vicinity': result['formatted_address'] ?? result['vicinity'] ?? '',
+            'rating': result['rating'] ?? 4.5,
+            'is_search_result': true,
+          };
+
+          _fetchNearbyPlaces(lat, lng, searchResult: place);
+        }
+      }
+    } catch (e) {
+      debugPrint('Lỗi Place Details API: $e');
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
   Widget _buildSearchBar() {
     return Positioned(
       top: 50,
       left: 16,
       right: 16,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(30),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 10,
-              offset: const Offset(0, 5),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(30),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 10,
+                  offset: const Offset(0, 5),
+                ),
+              ],
             ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Tìm quán quen bạn nhé...',
-                style: TextStyle(color: Colors.grey[600], fontSize: 16),
-              ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _searchController,
+                    focusNode: _searchFocusNode,
+                    onChanged: (value) {
+                      setState(() {});
+                      _onSearchChanged(value);
+                    },
+                    onSubmitted: (value) {
+                      if (value.isNotEmpty) _fetchAutocomplete(value);
+                    },
+                    decoration: InputDecoration.collapsed(
+                      hintText: 'Tìm quán quen bạn nhé...',
+                      hintStyle: TextStyle(color: Colors.grey[600], fontSize: 16),
+                    ),
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                ),
+                if (_searchController.text.isNotEmpty)
+                  IconButton(
+                    icon: const Icon(Icons.clear, color: Colors.grey, size: 20),
+                    onPressed: () {
+                      _searchController.clear();
+                      _searchFocusNode.unfocus();
+                      setState(() {
+                        _autocompleteResults = [];
+                      });
+                    },
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                const SizedBox(width: 8),
+                Container(
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF4CAF50),
+                    shape: BoxShape.circle,
+                  ),
+                  child: IconButton(
+                    icon: _isSearching
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Icon(Icons.search, color: Colors.white),
+                    onPressed: () {
+                      final text = _searchController.text;
+                      if (text.isNotEmpty) {
+                        _searchFocusNode.unfocus();
+                        _fetchAutocomplete(text);
+                      }
+                    },
+                  ),
+                ),
+              ],
             ),
+          ),
+          if (_autocompleteResults.isNotEmpty) ...[
+            const SizedBox(height: 8),
             Container(
-              decoration: const BoxDecoration(
-                color: Color(0xFF4CAF50),
-                shape: BoxShape.circle,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 10,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
               ),
-              child: IconButton(
-                icon: const Icon(Icons.search, color: Colors.white),
-                onPressed: () {},
+              child: ListView.separated(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                shrinkWrap: true,
+                itemCount: _autocompleteResults.length,
+                separatorBuilder: (context, index) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final suggestion = _autocompleteResults[index];
+                  return ListTile(
+                    leading: const Icon(Icons.location_on, color: Colors.grey),
+                    title: Text(suggestion['name'] ?? ''),
+                    subtitle: Text(
+                      suggestion['description'] ?? '',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    onTap: () => _onSuggestionSelected(suggestion),
+                  );
+                },
               ),
             ),
-          ],
-        ),
+          ]
+        ],
       ),
     );
   }
@@ -695,6 +993,7 @@ class _MapScreenState extends State<MapScreen> {
               zoom: 14.0,
             ),
             onMapCreated: _onMapCreated,
+            onMapClick: _onMapClick,
             onStyleLoadedCallback: _onStyleLoaded,
             myLocationEnabled: _locationGranted,
             myLocationTrackingMode: _locationGranted
