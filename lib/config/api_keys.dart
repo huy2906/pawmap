@@ -1,4 +1,4 @@
 class ApiKeys {
   static const String googlePlacesKey =
-      'AIzaSyBg88b6GAaT4KZSAVKbdQnQlHLi4YeSHOQ';
+      'AIzaSyCgLCms28hlRHXofHDzbGT1_96x3gz0dHE';
 }

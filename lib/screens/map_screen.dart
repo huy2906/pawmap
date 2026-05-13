@@ -4,6 +4,7 @@ import 'package:geolocator/geolocator.dart';
 import 'dart:convert';
 import 'dart:async';
 import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
 import '../config/api_keys.dart';
 
 class MapScreen extends StatefulWidget {
@@ -24,11 +25,6 @@ class _MapScreenState extends State<MapScreen> {
   int _selectedPlaceIndex = -1;
 
   Set<Marker> _markers = {};
-  Set<Polyline> _polylines = {};
-
-  String? _routeDuration;
-  String? _routeDistance;
-  bool _isShowingRoute = false;
 
   Timer? _debounce;
   List<dynamic> _autocompleteResults = [];
@@ -97,7 +93,7 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<void> _fetchNearbyPlaces(double lat, double lng, {Map<String, dynamic>? searchResult}) async {
-    setState(() { _isLoading = true; _routeDistance = null; _routeDuration = null; _isShowingRoute = false; _polylines = {}; });
+    setState(() { _isLoading = true; });
 
     final url = Uri.parse(
       'https://maps.googleapis.com/maps/api/place/nearbysearch/json'
@@ -184,76 +180,16 @@ class _MapScreenState extends State<MapScreen> {
     _buildMarkers(_places);
   }
 
-  Future<void> _getDirections(double destLat, double destLng) async {
-    setState(() => _isLoading = true);
-    final url = Uri.parse(
-      'https://maps.googleapis.com/maps/api/directions/json'
-      '?origin=$_currentLat,$_currentLng&destination=$destLat,$destLng'
-      '&mode=driving&language=vi&key=${ApiKeys.googlePlacesKey}',
-    );
-    try {
-      final response = await http.get(url);
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['routes'] != null && (data['routes'] as List).isNotEmpty) {
-          final route = data['routes'][0];
-          final polylineStr = route['overview_polyline']['points'] as String;
-          final distance = route['legs'][0]['distance']['text'] as String;
-          final duration = route['legs'][0]['duration']['text'] as String;
-          final points = _decodePolyline(polylineStr);
-          final bounds = _boundsFromPoints(points);
-          setState(() {
-            _routeDistance = distance;
-            _routeDuration = duration;
-            _isShowingRoute = true;
-            _isLoading = false;
-            _polylines = {
-              Polyline(polylineId: const PolylineId('route'), points: points, color: Colors.blue, width: 4),
-            };
-          });
-          _mapController?.animateCamera(CameraUpdate.newLatLngBounds(bounds, 50));
-        } else {
-          setState(() => _isLoading = false);
-          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Không tìm thấy đường đi')));
-        }
-      } else {
-        setState(() => _isLoading = false);
+  Future<void> _openGoogleMapsDirections(double destLat, double destLng) async {
+    final url = 'https://www.google.com/maps/dir/?api=1&destination=$destLat,$destLng';
+    final uri = Uri.parse(url);
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Không thể mở Google Maps')),
+        );
       }
-    } catch (e) {
-      setState(() => _isLoading = false);
-      debugPrint('Lỗi Directions: $e');
     }
-  }
-
-  List<LatLng> _decodePolyline(String encoded) {
-    List<LatLng> poly = [];
-    int index = 0, len = encoded.length, lat = 0, lng = 0;
-    while (index < len) {
-      int b, shift = 0, result = 0;
-      do { b = encoded.codeUnitAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
-      lat += ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
-      shift = 0; result = 0;
-      do { b = encoded.codeUnitAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
-      lng += ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
-      poly.add(LatLng(lat / 1E5, lng / 1E5));
-    }
-    return poly;
-  }
-
-  LatLngBounds _boundsFromPoints(List<LatLng> points) {
-    double minLat = points.first.latitude, maxLat = points.first.latitude;
-    double minLng = points.first.longitude, maxLng = points.first.longitude;
-    for (final p in points) {
-      if (p.latitude < minLat) minLat = p.latitude;
-      if (p.latitude > maxLat) maxLat = p.latitude;
-      if (p.longitude < minLng) minLng = p.longitude;
-      if (p.longitude > maxLng) maxLng = p.longitude;
-    }
-    return LatLngBounds(southwest: LatLng(minLat, minLng), northeast: LatLng(maxLat, maxLng));
-  }
-
-  void _removeRoute() {
-    setState(() { _polylines = {}; _isShowingRoute = false; _routeDistance = null; _routeDuration = null; });
   }
 
   void _onSearchChanged(String query) {
@@ -452,7 +388,7 @@ class _MapScreenState extends State<MapScreen> {
                   const Spacer(),
                   Row(children: [
                     Expanded(child: ElevatedButton(
-                      onPressed: () => _getDirections(lat, lng),
+                      onPressed: () => _openGoogleMapsDirections(lat, lng),
                       style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0), minimumSize: const Size(0, 30)),
                       child: const Text('Chỉ đường', style: TextStyle(color: Colors.white, fontSize: 12)),
                     )),
@@ -472,30 +408,10 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-  Widget _buildRouteInfo() {
-    if (!_isShowingRoute) return const SizedBox.shrink();
-    return Positioned(
-      bottom: 210, left: 16, right: 16,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: Colors.blue.shade50, borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.blue.shade200),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 4, offset: const Offset(0, 2))],
-        ),
-        child: Row(children: [
-          const Icon(Icons.directions_car, color: Colors.blue),
-          const SizedBox(width: 8),
-          Expanded(child: Text('$_routeDistance • $_routeDuration', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue, fontSize: 16))),
-          IconButton(icon: const Icon(Icons.close, color: Colors.grey), onPressed: _removeRoute, constraints: const BoxConstraints(), padding: EdgeInsets.zero),
-        ]),
-      ),
-    );
-  }
 
   Widget _buildFAB() {
     return Positioned(
-      bottom: _isShowingRoute ? 270 : 210, right: 16,
+      bottom: 210, right: 16,
       child: FloatingActionButton(
         backgroundColor: Colors.white,
         onPressed: _moveToCurrentLocation,
@@ -519,11 +435,9 @@ class _MapScreenState extends State<MapScreen> {
           myLocationEnabled: _locationGranted,
           myLocationButtonEnabled: false,
           markers: _markers,
-          polylines: _polylines,
           onTap: _onMapTap,
         ),
         _buildSearchBar(),
-        _buildRouteInfo(),
         _buildFAB(),
         _buildBottomSheet(),
         _buildLoadingIndicator(),
