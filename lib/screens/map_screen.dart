@@ -25,6 +25,19 @@ class _MapScreenState extends State<MapScreen> {
   int _selectedPlaceIndex = -1;
 
   Set<Marker> _markers = {};
+  BitmapDescriptor? _customMarkerIcon;
+
+  Future<void> _loadCustomMarker() async {
+    final icon = await BitmapDescriptor.fromAssetImage(
+      const ImageConfiguration(size: Size(80, 80)),
+      'assets/images/paw_marker.png',
+    );
+    if (mounted) {
+      setState(() {
+        _customMarkerIcon = icon;
+      });
+    }
+  }
 
   Timer? _debounce;
   List<dynamic> _autocompleteResults = [];
@@ -35,6 +48,7 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void initState() {
     super.initState();
+    _loadCustomMarker();
     _checkLocationPermission();
   }
 
@@ -141,11 +155,10 @@ class _MapScreenState extends State<MapScreen> {
       final place = places[i];
       final lat = (place['geometry']['location']['lat'] as num).toDouble();
       final lng = (place['geometry']['location']['lng'] as num).toDouble();
-      final isSearch = place['is_search_result'] == true;
       markers.add(Marker(
         markerId: MarkerId(place['place_id'] ?? 'place_$i'),
         position: LatLng(lat, lng),
-        icon: BitmapDescriptor.defaultMarkerWithHue(isSearch ? BitmapDescriptor.hueRed : BitmapDescriptor.hueGreen),
+        icon: _customMarkerIcon ?? BitmapDescriptor.defaultMarker,
         onTap: () => _onMarkerTap(i),
       ));
     }

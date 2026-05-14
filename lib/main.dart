@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'theme/app_theme.dart';
 import 'screens/main_navigation.dart';
+import 'screens/splash_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,7 +17,11 @@ class PawMapApp extends StatelessWidget {
     return MaterialApp(
       title: 'PawMap Vietnam',
       theme: AppTheme.lightTheme,
-      home: const MainNavigation(),
+      initialRoute: '/splash',
+      routes: {
+        '/splash': (context) => const SplashScreen(),
+        '/home': (context) => const MainNavigation(),
+      },
       debugShowCheckedModeBanner: false,
     );
   }
