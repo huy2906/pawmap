@@ -1,297 +1,418 @@
+import 'dart:math';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
-const clinicSvg =
-    '''<svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <path d="M42 26H58C60.2091 26 62 27.7909 62 30V42H74C76.2091 42 78 43.7909 78 46V54C78 56.2091 76.2091 58 74 58H62V70C62 72.2091 60.2091 74 58 74H42C39.7909 74 38 72.2091 38 70V58H26C23.7909 58 22 56.2091 22 54V46C22 43.7909 23.7909 42 26 42H38V30C38 27.7909 39.7909 26 42 26Z" stroke="white" stroke-width="4" stroke-linejoin="round" fill="none"/>
-  <path d="M50 56C50 56 42 49 42 44C42 40.5 45.5 38 48 40.5L50 43L52 40.5C54.5 38 58 40.5 58 44C58 49 50 56 50 56Z" fill="#E87A3D"/>
-</svg>''';
+import '../utils/app_icons.dart';
+import '../config/api_keys.dart';
+import 'map_screen.dart';
 
-const spaSvg =
-    '''<svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <path d="M50 72C40 72 36 66 36 60C36 55 42 53 42 53C42 53 46 56 50 56C54 56 58 53 58 53C58 53 64 55 64 60C64 66 60 72 50 72Z" stroke="white" stroke-width="3" stroke-linejoin="round" fill="none"/>
-  <circle cx="36" cy="48" r="4.5" stroke="white" stroke-width="3" fill="none"/>
-  <circle cx="44" cy="40" r="5" stroke="white" stroke-width="3" fill="none"/>
-  <circle cx="56" cy="40" r="5" stroke="white" stroke-width="3" fill="none"/>
-  <circle cx="64" cy="48" r="4.5" stroke="white" stroke-width="3" fill="none"/>
-  <circle cx="36" cy="30" r="3" stroke="white" stroke-width="2.5" fill="none"/>
-  <circle cx="46" cy="24" r="4" stroke="white" stroke-width="2.5" fill="none"/>
-  <circle cx="60" cy="30" r="5" stroke="white" stroke-width="2.5" fill="none"/>
-  <circle cx="28" cy="40" r="4" stroke="white" stroke-width="2.5" fill="none"/>
-</svg>''';
+class HomeScreen extends StatefulWidget {
+  final VoidCallback? onNavigateToMap;
+  
+  const HomeScreen({super.key, this.onNavigateToMap});
 
-const hotelSvg =
-    '''<svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <path d="M22 55L50 32L78 55" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-  <path d="M28 50V74C28 76.2 29.8 78 32 78H68C70.2 78 72 76.2 72 74V50" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-  <path d="M42 78V66C42 61.6 45.6 58 50 58C54.4 58 58 61.6 58 66V78" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-  <path d="M35 32C35 25 41 20 41 20C36 22 32 27 32 34C32 41 39 46 39 46C34 41 35 32 35 32Z" fill="white"/>
-  <circle cx="50" cy="48" r="2.5" fill="white"/>
-  <circle cx="45" cy="43" r="2" fill="white"/>
-  <circle cx="50" cy="41" r="2" fill="white"/>
-  <circle cx="55" cy="43" r="2" fill="white"/>
-  <circle cx="55" cy="22" r="1.5" fill="white"/>
-  <path d="M68 28 L69.5 32 L73.5 33 L69.5 34 L68 38 L66.5 34 L62.5 33 L66.5 32 Z" fill="white"/>
-</svg>''';
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
 
-const petShopSvg =
-    '''<svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <path d="M28 42H72L68 76C67.5 79.5 64 82 60 82H40C36 82 32.5 79.5 32 76L28 42Z" stroke="#D29A46" stroke-width="3" stroke-linejoin="round" fill="none"/>
-  <path d="M38 42V32C38 26 43 22 50 22C57 22 62 26 62 32V42" stroke="#D29A46" stroke-width="3" stroke-linecap="round" fill="none"/>
-  <path d="M40 60C37 57 37 63 40 64C41 64.5 42 63 42 63H58C58 63 59 64.5 60 64C63 63 63 57 60 60C62 58 60 55 58 57C58 57 57 58 57 58H43C43 58 42 57 42 57C40 55 38 58 40 60Z" stroke="#D29A46" stroke-width="3" stroke-linejoin="round" fill="none"/>
-</svg>''';
+class _HomeScreenState extends State<HomeScreen> {
+  bool _isLoading = true;
+  String _locationText = 'Đang tải vị trí...';
+  List<dynamic> _places = [];
+  double _currentLat = 10.7769; // Default HCM
+  double _currentLng = 106.7009;
 
-class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
+  @override
+  void initState() {
+    super.initState();
+    _initLocationAndData();
+  }
+
+  Future<void> _initLocationAndData() async {
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      _handleLocationDenied();
+      return;
+    }
+
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        _handleLocationDenied();
+        return;
+      }
+    }
+    if (permission == LocationPermission.deniedForever) {
+      _handleLocationDenied();
+      return;
+    }
+
+    try {
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
+      );
+      _currentLat = position.latitude;
+      _currentLng = position.longitude;
+      await _fetchCurrentDistrict(_currentLat, _currentLng);
+      await _fetchNearbyPlaces(_currentLat, _currentLng);
+    } catch (e) {
+      _handleLocationDenied();
+    }
+  }
+
+  void _handleLocationDenied() {
+    if (mounted) {
+      setState(() {
+        _locationText = 'Bật định vị để xem';
+        _isLoading = false;
+      });
+      _fetchNearbyPlaces(_currentLat, _currentLng);
+    }
+  }
+
+  Future<void> _fetchCurrentDistrict(double lat, double lng) async {
+    final url = Uri.parse(
+      'https://maps.googleapis.com/maps/api/geocode/json'
+      '?latlng=$lat,$lng&language=vi&key=${ApiKeys.googlePlacesKey}',
+    );
+
+    try {
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'OK') {
+          final results = data['results'] as List<dynamic>;
+          if (results.isNotEmpty) {
+            final addressComponents = results[0]['address_components'] as List<dynamic>;
+            String? districtName;
+            String? cityName;
+            for (var component in addressComponents) {
+              final types = component['types'] as List<dynamic>;
+              if (types.contains('administrative_area_level_2')) {
+                districtName = component['long_name'];
+              }
+              if (types.contains('administrative_area_level_1')) {
+                cityName = component['long_name'];
+              }
+            }
+            if (mounted) {
+              if (districtName != null && cityName != null) {
+                setState(() => _locationText = '$districtName, $cityName');
+              } else if (districtName != null) {
+                setState(() => _locationText = districtName!);
+              } else {
+                setState(() => _locationText = 'Không rõ địa điểm');
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Geocode Error: $e');
+      if (mounted) {
+        setState(() => _locationText = 'Lỗi tải địa điểm');
+      }
+    }
+  }
+
+  Future<void> _fetchNearbyPlaces(double lat, double lng) async {
+    if (mounted) setState(() => _isLoading = true);
+
+    final url = Uri.parse(
+      'https://maps.googleapis.com/maps/api/place/nearbysearch/json'
+      '?location=$lat,$lng&radius=5000&type=veterinary_care&language=vi&key=${ApiKeys.googlePlacesKey}',
+    );
+
+    try {
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'OK' || data['status'] == 'ZERO_RESULTS') {
+          List<dynamic> results = data['results'] as List<dynamic>? ?? [];
+          if (results.length > 5) {
+            results = results.sublist(0, 5);
+          }
+          if (mounted) {
+            setState(() {
+              _places = results;
+              _isLoading = false;
+            });
+          }
+        } else {
+          if (mounted) setState(() => _isLoading = false);
+        }
+      } else {
+        if (mounted) setState(() => _isLoading = false);
+      }
+    } catch (e) {
+      debugPrint('Nearby Error: $e');
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _openGoogleMapsDirections(double destLat, double destLng) async {
+    final url = 'https://www.google.com/maps/dir/?api=1&destination=$destLat,$destLng';
+    final uri = Uri.parse(url);
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Không thể mở Google Maps')),
+        );
+      }
+    }
+  }
+
+  String _getPhotoUrl(String? photoRef) {
+    if (photoRef == null || photoRef.isEmpty) return '';
+    return 'https://maps.googleapis.com/maps/api/place/photo'
+        '?maxwidth=400&photo_reference=$photoRef&key=${ApiKeys.googlePlacesKey}';
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFFF8F2),
-      body: Column(
-        children: [
-          _buildHeader(),
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
+      backgroundColor: const Color(0xFFF6F8FB),
+      body: SingleChildScrollView(
+        child: Stack(
+          children: [
+            // Background Gradient Hero
+            Container(
+              height: 280,
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color(0xFF1B6FB5),
+                    Color(0xFF2E86CC),
+                    Color(0xFF4FA3DC),
+                  ],
+                  stops: [0.0, 0.55, 1.0],
+                ),
+              ),
+              child: Stack(
                 children: [
-                  _buildSearchBar(),
-                  const SizedBox(height: 24),
-                  _buildCategorySection(),
-                  const SizedBox(height: 24),
-                  _buildNearbySection(),
-                  const SizedBox(height: 32),
+                  Positioned(
+                    right: -20,
+                    top: 4,
+                    child: Transform.rotate(
+                      angle: -12 * pi / 180,
+                      child: Opacity(
+                        opacity: 0.13,
+                        child: SvgPicture.string(
+                          AppIcons.pawGlyphWhite,
+                          width: 180,
+                          height: 180,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    right: 70,
+                    top: 64,
+                    child: Transform.rotate(
+                      angle: 18 * pi / 180,
+                      child: Opacity(
+                        opacity: 0.09,
+                        child: SvgPicture.string(
+                          AppIcons.pawGlyphWhite,
+                          width: 70,
+                          height: 70,
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
-          ),
-        ],
+            
+            // Foreground Content
+            Column(
+              children: [
+                SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 16, 18, 70),
+                    child: Column(
+                      children: [
+                        _buildTopRow(),
+                        const SizedBox(height: 18),
+                        _buildSearchBar(),
+                      ],
+                    ),
+                  ),
+                ),
+                
+                // Body Container
+                Container(
+                  transform: Matrix4.translationValues(0, -36, 0),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFF6F8FB),
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(0, 24, 0, 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: _buildServicesSection(),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: _buildNearbySectionHeader(),
+                        ),
+                        _buildSpotlightContent(),
+                        const SizedBox(height: 16),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildHeader() {
-    const pawSvg =
-        '''<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-  <ellipse cx="10"  cy="5.5" rx="3.5" ry="5"   fill="white"/>
-  <ellipse cx="22"  cy="5.5" rx="3.5" ry="5"   fill="white"/>
-  <ellipse cx="4.5" cy="15"  rx="3"   ry="4.5" fill="white" transform="rotate(-15 4.5 15)"/>
-  <ellipse cx="27.5" cy="15" rx="3"   ry="4.5" fill="white" transform="rotate(15 27.5 15)"/>
-  <path d="M16 13 C9 13 6 18.5 8 23 C10 27 12.5 26.5 16 26.5 C19.5 26.5 22 27 24 23 C26 18.5 23 13 16 13Z" fill="white"/>
-</svg>''';
-
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFFFF8C42),
-            Color(0xFFF4A261),
-            Color(0xFFFDDCB5),
-          ],
+  Widget _buildTopRow() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: const [
+              BoxShadow(
+                color: Color.fromRGBO(0, 0, 0, 0.12),
+                blurRadius: 12,
+                offset: Offset(0, 4),
+              ),
+            ],
+          ),
+          alignment: Alignment.center,
+          child: SvgPicture.string(
+            AppIcons.pinGlyph,
+            width: 28,
+            height: 28,
+          ),
         ),
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Stack(
-          children: [
-            // Bàn chân trang trí — vị trí tuyệt đối, không ảnh hưởng đến size của header
-            Positioned(
-              bottom: 8,
-              right: 64,
-              child: Opacity(
-                opacity: 0.25,
-                child: SvgPicture.string(
-                  pawSvg,
-                  width: 38,
-                  height: 38,
+        const SizedBox(width: 10),
+        const Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'XIN CHÀO MINH',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: Color.fromRGBO(255, 255, 255, 0.78),
+                  letterSpacing: 0.4,
                 ),
               ),
-            ),
-            // Header nội dung — child này quyết định chiều cao của toàn bộ Stack
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          "PawMap Vietnam",
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          "Tìm cơ sở thú y gần bạn",
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Icon(
-                    Icons.notifications_outlined,
-                    color: Colors.white,
-                    size: 24,
-                  ),
-                ],
+              Text(
+                'PawMap Vietnam',
+                style: TextStyle(
+                  fontSize: 19,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                  letterSpacing: -0.2,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: const Color.fromRGBO(255, 255, 255, 0.18),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: const Color.fromRGBO(255, 255, 255, 0.25),
+              width: 1,
+            ),
+          ),
+          alignment: Alignment.center,
+          child: SvgPicture.string(
+            AppIcons.bellIconDot,
+            width: 20,
+            height: 20,
+          ),
+        ),
+      ],
     );
   }
 
   Widget _buildSearchBar() {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-      height: 44,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE5DDD5)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 4,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
-      child: const Row(
-        children: [
-          SizedBox(width: 12),
-          Icon(Icons.search, color: Color(0xFFAAAAAA), size: 18),
-          SizedBox(width: 8),
-          Text(
-            "Tìm kiếm cơ sở thú y, dịch vụ...",
-            style: TextStyle(color: Color(0xFFAAAAAA), fontSize: 14),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCategorySection() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: [
-        _buildCategoryItem("Phòng khám", clinicSvg, const Color(0xFFFFD1B3)),
-        _buildCategoryItem("Grooming", spaSvg, const Color(0xFFC3E8C3)),
-        _buildCategoryItem("Hotel", hotelSvg, const Color(0xFFCFAEEA)),
-        _buildCategoryItem("Pet Shop", petShopSvg, const Color(0xFFFFEDAC)),
-      ],
-    );
-  }
-
-  Widget _buildCategoryItem(String label, String svgString, Color bgColor) {
-    return CategoryItem(label: label, svgString: svgString, bgColor: bgColor);
-  }
-
-  Widget _buildNearbySection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 16),
-          child: Text(
-            "Gần bạn",
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF333333),
-            ),
-          ),
-        ),
-        const NearbyItemCard(),
-      ],
-    );
-  }
-}
-
-class CategoryItem extends StatefulWidget {
-  final String label;
-  final String svgString;
-  final Color bgColor;
-
-  const CategoryItem({
-    super.key,
-    required this.label,
-    required this.svgString,
-    required this.bgColor,
-  });
-
-  @override
-  State<CategoryItem> createState() => _CategoryItemState();
-}
-
-class _CategoryItemState extends State<CategoryItem>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _scaleAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 100),
-    );
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.93).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
     return GestureDetector(
-      onTapDown: (_) => _controller.forward(),
-      onTapUp: (_) => _controller.reverse(),
-      onTapCancel: () => _controller.reverse(),
-      child: ScaleTransition(
-        scale: _scaleAnimation,
-        child: Column(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const MapScreen(autoFocusSearch: true)),
+        );
+      },
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        height: 48,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: const [
+            BoxShadow(
+              color: Color.fromRGBO(15, 39, 64, 0.12),
+              blurRadius: 22,
+              offset: Offset(0, 8),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.only(left: 14, right: 6),
+        child: Row(
           children: [
+            SvgPicture.string(
+              AppIcons.searchIcon,
+              width: 18,
+              height: 18,
+            ),
+            const SizedBox(width: 8),
+            const Expanded(
+              child: Text(
+                'Tìm phòng khám, spa, pet shop…',
+                style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.normal,
+                  color: Color(0xFF0F2740),
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
             Container(
-              width: 56,
-              height: 56,
+              width: 36,
+              height: 36,
               decoration: BoxDecoration(
-                color: widget.bgColor,
-                borderRadius: BorderRadius.circular(17),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.06),
-                    blurRadius: 3,
-                    offset: const Offset(0, 1),
-                  ),
-                ],
+                color: const Color(0xFF1B6FB5),
+                borderRadius: BorderRadius.circular(10),
               ),
               alignment: Alignment.center,
-              child: SvgPicture.string(widget.svgString, width: 52, height: 52),
-            ),
-            const SizedBox(height: 7),
-            Text(
-              widget.label,
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: Color(0xFF555555),
+              child: SvgPicture.string(
+                AppIcons.filterIcon,
+                width: 14,
+                height: 14,
               ),
             ),
           ],
@@ -299,104 +420,523 @@ class _CategoryItemState extends State<CategoryItem>
       ),
     );
   }
-}
 
-class NearbyItemCard extends StatefulWidget {
-  const NearbyItemCard({super.key});
-
-  @override
-  State<NearbyItemCard> createState() => _NearbyItemCardState();
-}
-
-class _NearbyItemCardState extends State<NearbyItemCard>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _scaleAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 100),
-    );
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.93).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+  void _navigateToCategory(String type, String keyword) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MapScreen(
+          searchType: type,
+          searchKeyword: keyword,
+        ),
+      ),
     );
   }
 
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: (_) => _controller.forward(),
-      onTapUp: (_) => _controller.reverse(),
-      onTapCancel: () => _controller.reverse(),
-      child: ScaleTransition(
-        scale: _scaleAnimation,
-        child: Container(
-          margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFEDE6DC)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.06),
-                blurRadius: 4,
-                offset: const Offset(0, 2),
+  Widget _buildServicesSection() {
+    return Column(
+      children: [
+        const Padding(
+          padding: EdgeInsets.fromLTRB(4, 4, 4, 12),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Dịch vụ',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF0F2740),
+                  letterSpacing: -0.2,
+                ),
+              ),
+              Text(
+                'Xem tất cả',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF1B6FB5),
+                ),
               ),
             ],
           ),
-          child: Row(
+        ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: CategoryCell(id: 'vet', label: 'Phòng khám', iconSvg: AppIcons.vetIcon, bgColor: const Color(0xFFE6F0F9), shadowColor: const Color.fromRGBO(27, 111, 181, 0.18), onTap: () => _navigateToCategory('veterinary_care', 'phòng khám thú y'))),
+            const SizedBox(width: 10),
+            Expanded(child: CategoryCell(id: 'groom', label: 'Spa & Tắm', iconSvg: AppIcons.groomingIcon, bgColor: const Color(0xFFEAF6D9), shadowColor: const Color.fromRGBO(141, 198, 63, 0.22), onTap: () => _navigateToCategory('pet_store', 'spa thú cưng|grooming thú cưng|tắm thú cưng'))),
+            const SizedBox(width: 10),
+            Expanded(child: CategoryCell(id: 'hotel', label: 'Khách sạn', iconSvg: AppIcons.hotelIcon, bgColor: const Color(0xFFE6F0F9), shadowColor: const Color.fromRGBO(27, 111, 181, 0.18), onTap: () => _navigateToCategory('lodging', 'khách sạn thú cưng|boarding thú cưng|nhà trọ thú cưng'))),
+            const SizedBox(width: 10),
+            Expanded(child: CategoryCell(id: 'shop', label: 'Pet Shop', iconSvg: AppIcons.shopIcon, bgColor: const Color(0xFFEAF6D9), shadowColor: const Color.fromRGBO(141, 198, 63, 0.22), onTap: () => _navigateToCategory('pet_store', 'pet shop|cửa hàng thú cưng'))),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNearbySectionHeader() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 20, 4, 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFF0E5),
-                  borderRadius: BorderRadius.circular(13),
+              const Text(
+                'Gần bạn',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF0F2740),
+                  letterSpacing: -0.2,
                 ),
-                alignment: Alignment.center,
-                child: SvgPicture.string(clinicSvg, width: 22, height: 22),
               ),
-              const SizedBox(width: 12),
-              const Expanded(
+              const SizedBox(height: 3),
+              Row(
+                children: [
+                  SvgPicture.string(
+                    AppIcons.locationDotIcon,
+                    width: 11,
+                    height: 11,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    _locationText,
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.normal,
+                      color: Color(0xFF5A6B7C),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          GestureDetector(
+            onTap: () {
+              if (widget.onNavigateToMap != null) {
+                widget.onNavigateToMap!();
+              }
+            },
+            behavior: HitTestBehavior.opaque,
+            child: const Text(
+              'Xem bản đồ',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF1B6FB5),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSpotlightContent() {
+    if (_isLoading) {
+      return const SizedBox(
+        height: 280,
+        child: Center(
+          child: CircularProgressIndicator(color: Color(0xFF1B6FB5)),
+        ),
+      );
+    }
+
+    if (_places.isEmpty) {
+      return Container(
+        height: 280,
+        margin: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(22),
+          boxShadow: const [
+            BoxShadow(
+              color: Color.fromRGBO(15, 39, 64, 0.06),
+              blurRadius: 16,
+              offset: Offset(0, 4),
+            ),
+          ],
+        ),
+        child: const Center(
+          child: Text(
+            'Không tìm thấy địa điểm xung quanh',
+            style: TextStyle(color: Color(0xFF5A6B7C), fontSize: 14),
+          ),
+        ),
+      );
+    }
+
+    return SizedBox(
+      height: 330, // Increased height to accommodate photo and content
+      child: PageView.builder(
+        controller: PageController(viewportFraction: 0.9),
+        itemCount: _places.length,
+        itemBuilder: (context, index) {
+          final place = _places[index];
+          return _buildSpotlightCard(place, index);
+        },
+      ),
+    );
+  }
+
+  Widget _buildSpotlightCard(dynamic place, int index) {
+    final lat = (place['geometry']['location']['lat'] as num).toDouble();
+    final lng = (place['geometry']['location']['lng'] as num).toDouble();
+    final distance = Geolocator.distanceBetween(_currentLat, _currentLng, lat, lng);
+    final distanceText = (distance / 1000).toStringAsFixed(1);
+    
+    final photoRef = (place['photos'] as List?)?.isNotEmpty == true 
+        ? place['photos'][0]['photo_reference'] as String? 
+        : null;
+    final photoUrl = _getPhotoUrl(photoRef);
+    
+    final isOpen = place['opening_hours']?['open_now'];
+    final openText = isOpen == true ? 'ĐANG MỞ CỬA' : (isOpen == false ? 'ĐÃ ĐÓNG CỬA' : 'KHÔNG RÕ');
+    final openColor = isOpen == true ? const Color(0xFF6FA82C) : (isOpen == false ? Colors.red : Colors.grey);
+    final dotColor = isOpen == true ? const Color(0xFF8DC63F) : (isOpen == false ? Colors.red : Colors.grey);
+
+    final rating = place['rating']?.toString() ?? '—';
+    final userRatingsTotal = place['user_ratings_total']?.toString() ?? '0';
+
+    return Container(
+      margin: const EdgeInsets.only(right: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: const [
+          BoxShadow(
+            color: Color.fromRGBO(15, 39, 64, 0.06),
+            blurRadius: 16,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(22),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Image Top
+            SizedBox(
+              height: 140,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (photoRef != null && photoUrl.isNotEmpty)
+                    CachedNetworkImage(
+                      imageUrl: photoUrl,
+                      fit: BoxFit.cover,
+                      placeholder: (context, url) => Container(
+                        color: const Color(0xFFEAF1F7),
+                        child: const Center(child: CircularProgressIndicator(color: Color(0xFF1B6FB5))),
+                      ),
+                      errorWidget: (context, url, error) => _buildPlaceholderMap(),
+                    )
+                  else
+                    _buildPlaceholderMap(),
+                  
+                  // Badge
+                  Positioned(
+                    top: 10,
+                    left: 12,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(999),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color.fromRGBO(0, 0, 0, 0.08),
+                            blurRadius: 6,
+                            offset: Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Text(
+                        '#${index + 1} Gần bạn',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF0F2740),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Bottom Content
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      "Phòng khám thú y PetCare",
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF2D3E2F),
-                      ),
+                    Row(
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: dotColor,
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          openText,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: openColor,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
                     ),
-                    SizedBox(height: 2),
+                    const SizedBox(height: 6),
                     Text(
-                      "Cách bạn 2.5 km",
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFF999999),
+                      place['name'] ?? 'Không có tên',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF0F2740),
+                        letterSpacing: -0.2,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${place['vicinity']} · Cách bạn $distanceText km',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.normal,
+                        color: Color(0xFF5A6B7C),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const Spacer(),
+                    Row(
+                      children: [
+                        _buildTag(AppIcons.starIcon, '$rating · $userRatingsTotal đánh giá'),
+                        const SizedBox(width: 8),
+                        _buildTag(AppIcons.locationDotIcon, '$distanceText km'),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () {}, // Chi tiết
+                            child: Container(
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1B6FB5),
+                                borderRadius: BorderRadius.circular(12),
+                                boxShadow: const [
+                                  BoxShadow(
+                                    color: Color.fromRGBO(27, 111, 181, 0.25),
+                                    blurRadius: 10,
+                                    offset: Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              alignment: Alignment.center,
+                              child: const Text(
+                                'Xem chi tiết',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => _openGoogleMapsDirections(lat, lng),
+                            child: Container(
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: const Color(0xFF1B6FB5),
+                                  width: 1.5,
+                                ),
+                              ),
+                              alignment: Alignment.center,
+                              child: const Text(
+                                'Chỉ đường',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF1B6FB5),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ),
-              const Icon(
-                Icons.chevron_right,
-                color: Color(0xFFCCCCCC),
-                size: 18,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPlaceholderMap() {
+    return Container(
+      color: const Color(0xFFEAF1F7),
+      child: Center(
+        child: Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: const [
+              BoxShadow(
+                color: Color.fromRGBO(0, 0, 0, 0.1),
+                blurRadius: 8,
+                offset: Offset(0, 2),
               ),
             ],
           ),
+          alignment: Alignment.center,
+          child: SvgPicture.string(
+            AppIcons.vetIcon,
+            width: 32,
+            height: 32,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTag(String iconSvg, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF2F5F8),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SvgPicture.string(
+            iconSvg,
+            width: 11,
+            height: 11,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF0F2740),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class CategoryCell extends StatefulWidget {
+  final String id;
+  final String label;
+  final String iconSvg;
+  final Color bgColor;
+  final Color shadowColor;
+  final VoidCallback? onTap;
+
+  const CategoryCell({
+    super.key,
+    required this.id,
+    required this.label,
+    required this.iconSvg,
+    required this.bgColor,
+    required this.shadowColor,
+    this.onTap,
+  });
+
+  @override
+  State<CategoryCell> createState() => _CategoryCellState();
+}
+
+class _CategoryCellState extends State<CategoryCell> {
+  bool _isActive = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: widget.onTap,
+      onTapDown: (_) => setState(() => _isActive = true),
+      onTapUp: (_) => setState(() => _isActive = false),
+      onTapCancel: () => setState(() => _isActive = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        transform: Matrix4.translationValues(0, _isActive ? -2 : 0, 0),
+        child: Column(
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: 62,
+              height: 62,
+              decoration: BoxDecoration(
+                color: widget.bgColor,
+                borderRadius: BorderRadius.circular(18),
+                boxShadow: [
+                  if (_isActive)
+                    BoxShadow(
+                      color: widget.shadowColor,
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
+                    )
+                  else
+                    const BoxShadow(
+                      color: Color.fromRGBO(15, 39, 64, 0.05),
+                      blurRadius: 6,
+                      offset: Offset(0, 2),
+                    ),
+                ],
+              ),
+              alignment: Alignment.center,
+              child: SvgPicture.string(
+                widget.iconSvg,
+                width: 30,
+                height: 30,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              widget.label,
+              style: const TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF0F2740),
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ),
       ),
     );

@@ -37,7 +37,7 @@ class _SOSScreenState extends State<SOSScreen> {
           circleId: const CircleId('sos_circle'),
           center: const LatLng(10.7769, 106.7009),
           radius: 100,
-          fillColor: Colors.red.withOpacity(0.3),
+          fillColor: Colors.red.withValues(alpha: 0.3),
           strokeColor: Colors.red,
           strokeWidth: 3,
         ),

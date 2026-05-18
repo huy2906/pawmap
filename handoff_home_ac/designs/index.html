@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>PawMap — Home redesign</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+
+<style>
+  html, body { margin: 0; padding: 0; background: #f0eee9; font-family: Inter, -apple-system, system-ui, sans-serif; }
+  * { box-sizing: border-box; }
+  @keyframes pmpulse {
+    0%   { transform: scale(.6); opacity: .8; }
+    100% { transform: scale(2.4); opacity: 0; }
+  }
+  /* hide horizontal scrollbars on chip rows */
+  ::-webkit-scrollbar { display: none; }
+</style>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="ios-frame.jsx"></script>
+<script type="text/babel" src="android-frame.jsx"></script>
+<script type="text/babel" src="icons.jsx"></script>
+<script type="text/babel" src="variant-a.jsx"></script>
+<script type="text/babel" src="variant-b.jsx"></script>
+<script type="text/babel" src="variant-c.jsx"></script>
+<script type="text/babel" src="variant-ac.jsx"></script>
+<script type="text/babel" src="variant-android.jsx"></script>
+
+<script type="text/babel" data-presets="react">
+// ─────────────────────────────────────────────────────────────
+// Icon & color reference card
+// ─────────────────────────────────────────────────────────────
+function BrandCard() {
+  const cats = [
+    { L: 'Phòng khám',   C: VetIcon },
+    { L: 'Grooming',     C: GroomingIcon },
+    { L: 'Khách sạn',    C: HotelIcon },
+    { L: 'Pet Shop',     C: ShopIcon },
+    { L: 'Huấn luyện',   C: TrainingIcon },
+    { L: 'Dắt đi dạo',   C: WalkIcon },
+    { L: 'Cấp cứu',      C: EmergencyIcon },
+  ];
+  const navIcons = [
+    { L: 'Trang chủ', C: HomeLineIcon },
+    { L: 'Bản đồ',    C: MapLineIcon },
+    { L: 'Lịch hẹn',  C: CalendarLineIcon },
+    { L: 'Hồ sơ',     C: ProfileLineIcon },
+  ];
+
+  const sw = (color, name, hex) => (
+    <div style={{ flex: 1 }}>
+      <div style={{ height: 80, borderRadius: 14, background: color, boxShadow: '0 4px 12px rgba(15,39,64,.08)' }}/>
+      <div style={{ marginTop: 8, fontSize: 12, fontWeight: 700, color: '#0F2740' }}>{name}</div>
+      <div style={{ fontSize: 11, color: '#5A6B7C', fontFamily: 'ui-monospace, monospace' }}>{hex}</div>
+    </div>
+  );
+
+  return (
+    <div style={{ width: 720, padding: 28, background: '#fff', borderRadius: 24, fontFamily: 'Inter, system-ui, sans-serif', boxShadow: '0 4px 16px rgba(0,0,0,.05)' }}>
+      {/* Logo header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 6 }}>
+        <img src="assets/logo.png" alt="logo" style={{ width: 56, height: 56, objectFit: 'contain' }}/>
+        <div>
+          <div style={{ fontSize: 22, fontWeight: 800, color: '#0F2740', letterSpacing: -.3 }}>PawMap Vietnam</div>
+          <div style={{ fontSize: 13, color: '#5A6B7C' }}>Bảng màu & bộ icon — lấy cảm hứng từ logo</div>
+        </div>
+      </div>
+
+      <div style={{ height: 1, background: 'rgba(15,39,64,.08)', margin: '20px 0' }}/>
+
+      <div style={{ fontSize: 13, fontWeight: 700, color: '#0F2740', letterSpacing: .3, textTransform: 'uppercase', marginBottom: 12 }}>Bảng màu</div>
+      <div style={{ display: 'flex', gap: 12 }}>
+        {sw(PM_BLUE, 'Pin Blue', '#1B6FB5')}
+        {sw(PM_BLUE_DEEP, 'Deep Blue', '#155488')}
+        {sw(PM_GREEN, 'Paw Green', '#8DC63F')}
+        {sw('#0F2740', 'Ink', '#0F2740')}
+        {sw('#F6F8FB', 'Mist', '#F6F8FB')}
+        {sw('#E94545', 'Alert', '#E94545')}
+      </div>
+
+      <div style={{ height: 1, background: 'rgba(15,39,64,.08)', margin: '24px 0 20px' }}/>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 28 }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#0F2740', letterSpacing: .3, textTransform: 'uppercase', marginBottom: 12 }}>Icon dịch vụ</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14 }}>
+            {cats.map((c, i) => (
+              <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                <div style={{ width: 64, height: 64, borderRadius: 18, background: '#F6F8FB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <c.C size={34}/>
+                </div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: '#0F2740', textAlign: 'center' }}>{c.L}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#0F2740', letterSpacing: .3, textTransform: 'uppercase', marginBottom: 12 }}>Icon thanh điều hướng</div>
+          <div style={{ display: 'flex', gap: 18, marginBottom: 18 }}>
+            {navIcons.map((n, i) => (
+              <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                <n.C size={28} color="#5A6B7C"/>
+                <div style={{ fontSize: 11, color: '#5A6B7C' }}>{n.L}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 18 }}>
+            {navIcons.map((n, i) => (
+              <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                <n.C size={28} color={PM_BLUE} filled/>
+                <div style={{ fontSize: 11, fontWeight: 700, color: PM_BLUE }}>{n.L}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#0F2740', letterSpacing: .3, textTransform: 'uppercase', margin: '24px 0 12px' }}>Brand mark</div>
+          <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+            <div style={{ width: 64, height: 64, borderRadius: 18, background: '#F6F8FB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <PinGlyph size={40} blue={PM_BLUE} green={PM_GREEN}/>
+            </div>
+            <div style={{ width: 64, height: 64, borderRadius: 18, background: PM_BLUE, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <PinGlyph size={40} blue="#fff" green={PM_GREEN}/>
+            </div>
+            <div style={{ width: 64, height: 64, borderRadius: 18, background: '#0F2740', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <PawGlyph size={36} color={PM_GREEN}/>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Phone wrapper
+// ─────────────────────────────────────────────────────────────
+function Phone({ children }) {
+  return (
+    <IOSDevice width={360} height={760}>
+      {children}
+    </IOSDevice>
+  );
+}
+
+function AndroidPhone({ children }) {
+  return (
+    <AndroidDevice width={360} height={760}>
+      {children}
+    </AndroidDevice>
+  );
+}
+
+function App() {
+  return (
+    <DesignCanvas>
+      <DCSection id="brand" title="Hệ thiết kế" subtitle="Màu chủ đạo lấy từ logo; bộ icon hai tông xanh dương + xanh lá">
+        <DCArtboard id="brand-card" label="Brand & Icons" width={720} height={520}>
+          <BrandCard/>
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="variants" title="iOS — Trang chủ" subtitle="Hi-fi prototype có thể tương tác. Bấm vào danh mục, chuyển tab…">
+        <DCArtboard id="vac" label="A+C · Hợp nhất" width={360} height={760}>
+          <Phone><VariantAC/></Phone>
+        </DCArtboard>
+        <DCArtboard id="vb" label="B · Map-first" width={360} height={760}>
+          <Phone><VariantB/></Phone>
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="android" title="Android — Material 3 / Material You" subtitle="Cùng 3 hướng thiết kế, áp dụng pattern Material 3: pill nav, FAB, M3 search bar, expressive shapes">
+        <DCArtboard id="vma" label="A · Material 3" width={360} height={760}>
+          <AndroidPhone><VariantAndroidA/></AndroidPhone>
+        </DCArtboard>
+        <DCArtboard id="vmb" label="B · Map-first + FAB" width={360} height={760}>
+          <AndroidPhone><VariantAndroidB/></AndroidPhone>
+        </DCArtboard>
+        <DCArtboard id="vmc" label="C · Material You expressive" width={360} height={760}>
+          <AndroidPhone><VariantAndroidC/></AndroidPhone>
+        </DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

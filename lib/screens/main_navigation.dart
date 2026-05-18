@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import '../utils/app_icons.dart';
 import 'home_screen.dart';
 import 'map_screen.dart';
 import 'appointments_screen.dart';
@@ -13,13 +15,19 @@ class MainNavigation extends StatefulWidget {
 
 class _MainNavigationState extends State<MainNavigation> {
   int _currentIndex = 0;
-  // Lazy loading: chỉ khởi tạo màn hình khi người dùng lần đầu bấm vào tab
   final Set<int> _visitedTabs = {0};
 
   Widget _buildScreen(int index) {
     switch (index) {
       case 0:
-        return const HomeScreen();
+        return HomeScreen(
+          onNavigateToMap: () {
+            setState(() {
+              _currentIndex = 1;
+              _visitedTabs.add(1);
+            });
+          },
+        );
       case 1:
         return const MapScreen();
       case 2:
@@ -44,42 +52,96 @@ class _MainNavigationState extends State<MainNavigation> {
           );
         }),
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
-        backgroundColor: Colors.white,
-        selectedItemColor: const Color(0xFFFF8C42),
-        unselectedItemColor: const Color(0xFFAAAAAA),
-        selectedFontSize: 11,
-        unselectedFontSize: 11,
-        currentIndex: _currentIndex,
-        onTap: (index) {
+      bottomNavigationBar: _buildBottomNav(),
+    );
+  }
+
+  Widget _buildBottomNav() {
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+    
+    return Container(
+      height: 76 + bottomPadding,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          top: BorderSide(
+            color: Color.fromRGBO(15, 39, 64, 0.06),
+            width: 1,
+          ),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Color.fromRGBO(15, 39, 64, 0.05),
+            blurRadius: 18,
+            offset: Offset(0, -4),
+          ),
+        ],
+      ),
+      padding: EdgeInsets.fromLTRB(4, 8, 4, 14 + bottomPadding),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _buildNavItem(0, 'Trang chủ', AppIcons.homeLineIconOutline, AppIcons.homeLineIconFilled),
+          _buildNavItem(1, 'Bản đồ', AppIcons.mapLineIconOutline, AppIcons.mapLineIconFilled),
+          _buildNavItem(2, 'Lịch hẹn', AppIcons.calendarLineIconOutline, AppIcons.calendarLineIconFilled),
+          _buildNavItem(3, 'Hồ sơ', AppIcons.profileLineIconOutline, AppIcons.profileLineIconFilled),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNavItem(int index, String label, String outlineIcon, String filledIcon) {
+    final isActive = _currentIndex == index;
+    final color = isActive ? const Color(0xFF1B6FB5) : const Color(0xFF9AA7B4);
+    
+    return Expanded(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
           setState(() {
             _visitedTabs.add(index);
             _currentIndex = index;
           });
         },
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home_outlined),
-            activeIcon: Icon(Icons.home),
-            label: 'Trang chủ',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.map_outlined),
-            activeIcon: Icon(Icons.map),
-            label: 'Bản đồ',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.calendar_today_outlined),
-            activeIcon: Icon(Icons.calendar_today),
-            label: 'Lịch hẹn',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person_outline),
-            activeIcon: Icon(Icons.person),
-            label: 'Hồ sơ',
-          ),
-        ],
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.center,
+              children: [
+                SvgPicture.string(
+                  isActive ? filledIcon : outlineIcon,
+                  width: 24,
+                  height: 24,
+                ),
+                if (isActive)
+                  Positioned(
+                    top: -8,
+                    child: Container(
+                      width: 24,
+                      height: 3,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1B6FB5),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 10.5,
+                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                color: color,
+                height: 1.2,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
